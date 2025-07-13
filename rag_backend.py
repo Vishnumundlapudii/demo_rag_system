@@ -6,6 +6,9 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import Chroma
 from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 from langchain.chains import ConversationalRetrievalChain
+from langchain.schema.runnable import RunnablePassthrough
+from langchain.schema.output_parser import StrOutputParser
+from langchain_core.prompts import ChatPromptTemplate
 from langchain.memory import ConversationBufferMemory
 from langchain.schema import Document
 
@@ -119,18 +122,20 @@ class LangChainChatbot:
         """Setup conversational retrieval chain"""
         print("🤖 Setting up chat chain...")
         
-        retriever = self.vector_store.as_retriever(
+        self.retriever = self.vector_store.as_retriever(
             search_type="similarity",
             search_kwargs={"k": 3}
         )
         
-        self.chat_chain = ConversationalRetrievalChain.from_llm(
-            llm=self.llm,
-            retriever=retriever,
-            memory=self.memory,
-            return_source_documents=True,
-            verbose=False
-        )
+        # Create a simple prompt template
+        self.prompt = ChatPromptTemplate.from_template("""
+        Answer the question based on the following context:
+        
+        Context: {context}
+        
+        Question: {question}
+        
+        Answer: """)
         
         print("✅ Chat chain ready!")
 
@@ -161,32 +166,38 @@ class LangChainChatbot:
 
     def chat(self, message):
         """Chat with the bot"""
-        if not self.chat_chain:
+        if not self.retriever:
             return "❌ System not initialized. Please restart the application."
         
         try:
-            # Use the chain with proper input format
-            result = self.chat_chain({
-                "question": message,
-                "chat_history": self.memory.chat_memory.messages
-            })
-            return result["answer"]
+            # Get relevant documents
+            docs = self.retriever.get_relevant_documents(message)
+            context = "\n\n".join([doc.page_content for doc in docs])
+            
+            # Format the prompt
+            formatted_prompt = self.prompt.format(context=context, question=message)
+            
+            # Get response from LLM
+            response = self.llm.invoke(formatted_prompt)
+            
+            # Store in memory
+            self.memory.chat_memory.add_user_message(message)
+            self.memory.chat_memory.add_ai_message(response.content)
+            
+            return response.content
             
         except Exception as e:
             return f"❌ Error: {str(e)}"
 
     def get_sources(self, message):
         """Get source documents for a query"""
-        if not self.chat_chain:
+        if not self.retriever:
             return []
         
         try:
-            result = self.chat_chain({
-                "question": message,
-                "chat_history": self.memory.chat_memory.messages
-            })
+            docs = self.retriever.get_relevant_documents(message)
             sources = []
-            for doc in result.get("source_documents", []):
+            for doc in docs:
                 sources.append({
                     "url": doc.metadata.get("source", "Unknown"),
                     "title": doc.metadata.get("title", "LangChain Docs")
