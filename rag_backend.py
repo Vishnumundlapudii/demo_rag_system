@@ -22,7 +22,7 @@ class LangChainChatbot:
             self.llm = ChatOpenAI(
                 openai_api_key=os.getenv("E2E_API_KEY"),
                 openai_api_base=os.getenv("E2E_LLM_ENDPOINT"),
-                model_name="gpt-3.5-turbo",
+                model_name=os.getenv("E2E_MODEL_NAME", "llama-3.1-8b-instruct"),
                 temperature=0.7
             )
         else:
