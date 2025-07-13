@@ -165,7 +165,7 @@ class LangChainChatbot:
             return "❌ System not initialized. Please restart the application."
         
         try:
-            result = self.chat_chain({"question": message})
+            result = self.chat_chain.invoke({"question": message})
             return result["answer"]
             
         except Exception as e:
@@ -177,7 +177,7 @@ class LangChainChatbot:
             return []
         
         try:
-            result = self.chat_chain({"question": message})
+            result = self.chat_chain.invoke({"question": message})
             sources = []
             for doc in result.get("source_documents", []):
                 sources.append({
